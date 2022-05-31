@@ -1,5 +1,10 @@
 CC = gcc
+WR = windres
 CFLAGS = -Wall
+
+.PHONY : clean-win clean
+
+# Gnu/Linux build
 
 alterftp : alterftp.c config_file.c debug.c
 	$(CC) $< -o $@ $(CFLAGS)
@@ -8,10 +13,19 @@ install : alterftp
 	cp $^ /usr/bin/$^
 	chmod a+x /usr/bin/$^
 
-.PHONY : clean
-
 clean :
 	@rm -f *~ alterftp
+
+# Windows build
+
+resource.o : resource.rc
+	$(WR) resource.rc -o $@
+
+alterftp-win : alterftp.c config_file.c debug.c resource.o
+	$(CC) alterftp.c resource.o -o $@ $(CFLAGS)
+
+clean-win :
+	@erase /F *.exe resource.o
 
 test1 : alterftp
 	./$^ help

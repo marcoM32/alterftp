@@ -11,9 +11,14 @@ int print_debug(const char *format, ...)
 	va_list arg;
 	int done;
 
-	char d_format[1024] = "\033[1;31m[d]\033[1;33m ";
-	strcat(d_format, format);
-	strcat(d_format, "\033[0m");
+	char d_format[1024] = "";
+	#ifndef _WIN32
+		strcat(d_format, "\033[1;31m[d]\033[1;33m ");
+		strcat(d_format, format);
+		strcat(d_format, "\033[0m");
+	#else
+		strcat(d_format, format);
+	#endif
 
 	va_start(arg, format);
 	done = vfprintf(stderr, d_format, arg);

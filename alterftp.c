@@ -3,7 +3,9 @@
 #include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/wait.h>
+#ifndef _WIN32
+	#include <sys/wait.h>
+#endif
 
 #include "config_file.c"
 #include "debug.c"
@@ -80,14 +82,22 @@ int main(int argc, char *argv[]) {
 		int x;
 		for(x = 0; x < targets_count; x++)
 		{
-			if(fork() == 0)
-			{
+			#ifndef _WIN32
+				if(fork() == 0)
+				{
+					curl_mkdir(base_path, targets[x]);
+				}
+			#else
 				curl_mkdir(base_path, targets[x]);
-			}
+			#endif
 		}
 
-		while(wait(NULL) > 0);
-		printf("\033[1;32mDONE.\033[0m\n");
+		#ifndef _WIN32
+			while(wait(NULL) > 0);
+			printf("\033[1;32mDONE.\033[0m\n");
+		#else
+			printf("DONE");
+		#endif
 	}
 	// RMDIR
 	else if(strcmp(cmd, "rmdir") == 0)
@@ -95,14 +105,22 @@ int main(int argc, char *argv[]) {
 		int x;
 		for(x = 0; x < targets_count; x++)
 		{
-			if(fork() == 0)
-			{
+			#ifndef _WIN32
+				if(fork() == 0)
+				{
+					curl_rmdir(base_path, targets[x]);
+				}
+			#else
 				curl_rmdir(base_path, targets[x]);
-			}
+			#endif
 		}
 
-		while(wait(NULL) > 0);
-		printf("\033[1;32mDONE.\033[0m\n");
+		#ifndef _WIN32
+			while(wait(NULL) > 0);
+			printf("\033[1;32mDONE.\033[0m\n");
+		#else
+			printf("DONE");
+		#endif
 	}
 	// SEND
 	else if(strcmp(cmd, "send") == 0)
@@ -113,15 +131,23 @@ int main(int argc, char *argv[]) {
 		for(x = 0; x < targets_count; x++)
 		{
 			char *target = targets[x] + strlen(credentials.dir) + 1;
-			if(fork() == 0)
-			{
+			#ifndef _WIN32
+				if(fork() == 0)
+				{
+					curl_send(base_path, targets[x], target);
+					exit(EXIT_SUCCESS);
+				}
+			#else
 				curl_send(base_path, targets[x], target);
-				exit(EXIT_SUCCESS);
-			}
+			#endif
 		}
 
-		while(wait(NULL) > 0);
-		printf("\033[1;32mDONE.\033[0m\n");
+		#ifndef _WIN32
+			while(wait(NULL) > 0);
+			printf("\033[1;32mDONE.\033[0m\n");
+		#else
+			printf("DONE");
+		#endif
 	}
 	// DELETE
 	else if(strcmp(cmd, "delete") == 0)
@@ -129,15 +155,23 @@ int main(int argc, char *argv[]) {
 		int x;
 		for(x = 0; x < targets_count; x++)
 		{
-			if(fork() == 0)
-			{
+			#ifndef _WIN32
+				if(fork() == 0)
+				{
+					curl_delete(base_path, targets[x]);
+					exit(EXIT_SUCCESS);
+				}
+			#else
 				curl_delete(base_path, targets[x]);
-				exit(EXIT_SUCCESS);
-			}
+			#endif
 		}
 
-		while(wait(NULL) > 0);
-		printf("\033[1;32mDONE.\033[0m\n");
+		#ifndef _WIN32
+			while(wait(NULL) > 0);
+			printf("\033[1;32mDONE.\033[0m\n");
+		#else
+			printf("DONE");
+		#endif
 	}
 	else
 	{
@@ -213,7 +247,14 @@ int curl_cmd(char *base_path, char *cmd, char *arg)
 	// strcat(location, "/");
 
 	// printf("%s %s %s %s\n", "curl", location, cmd, arg);
-	r = execlp("curl", "curl", "-sS", location, cmd, arg, (char *)NULL);
+	#ifndef _WIN32
+		r = execlp("curl", "curl", "-sS", location, cmd, arg, (char *)NULL);
+	#else
+		char *system_command = malloc((strlen(location) + strlen(cmd) + strlen(arg) + 19) * sizeof(char));
+		sprintf(system_command, "cmd /C curl -sS %s %s %s", location, cmd, arg);
+		r = system(system_command);
+		free(system_command);
+	#endif
 	free(location);
 	return r;
 }

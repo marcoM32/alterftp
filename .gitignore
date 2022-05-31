@@ -6,6 +6,7 @@ doc/
 
 # ignore build/run file
 alterftp
+alterftp-win.exe
 .alterftp_conf
 
 #ignore testing file
