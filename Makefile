@@ -9,12 +9,12 @@ CFLAGS = -Wall
 alterftp : alterftp.c config.c
 	$(CC) alterftp.c config.c -o "alterftp#" $(CFLAGS)
 
-install : alterftp
-	cp $^ /usr/bin/$^
-	chmod a+x /usr/bin/$^
+install :
+	cp "alterftp#" /usr/bin/alterftp#
+	chmod a+x /usr/bin/alterftp#
 
 clean :
-	@rm -f *~ alterftp#
+	@rm -f *~ "alterftp#"
 
 # Windows build
 

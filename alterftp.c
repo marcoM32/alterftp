@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
                     }
                     if(option == 's' && access(arg, F_OK) != 0)
 					{
-						fprintf(stdout, "ERROR the indicated file not exists");
+						fprintf(stdout, "ERROR the indicated file not exists\n");
 						exit(EXIT_FAILURE);
 					}
                 }
