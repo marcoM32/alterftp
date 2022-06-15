@@ -1,320 +1,291 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <unistd.h>
-#ifndef _WIN32
-	#include <sys/wait.h>
-#endif
+/*
+ * A small utility to work on ftp server with Curl
+ *
+ * Copyright 2016 @gilmoa for the public domain original code
+ * Copyright 2022 Marco Magliano for this review of the file
+ *
+ * This file is part of alterftp#.
+ *
+ * alterftp# is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * alterftp# is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with alterftp#.  If not, see <http://www.gnu.org/licenses/>.
+ */
+#include "alterftp.h"
 
-#include "config_file.c"
-#include "debug.c"
+int main(int argc, char *argv[])
+{
 
-#define CONF_PATH ".alterftp_conf"
+    if(argc < 2) print_usage(argv[0]), exit(EXIT_SUCCESS);
 
-void print_usage(char *name);
-void do_init();
+    char *arg = NULL;
 
-int curl_mkdir(char *base_path, char *path);
-int curl_rmdir(char *base_path, char *path);
-int curl_send(char *base_path, char *path, char *target);
-int curl_delete(char *base_path, char *path);
+    char *position = calloc(strlen("/") + 1, sizeof(char));
+    sprintf(position, "%s", "/");
 
-int main(int argc, char *argv[]) {
-	// checks arguments sanity
-	if(argc < 2)
-	{
-		print_usage(argv[0]);
-		exit(EXIT_SUCCESS);
-	}
-
-	char *cmd = argv[1];
-
-	if(strcmp(cmd, "init") != 0 && argc < 3)
-	{
-		print_usage(argv[0]);
-		exit(EXIT_SUCCESS);
-	}
-
-	// parse arguments
-	if(strcmp(cmd, "init") == 0)
-	{
-		do_init();
-		exit(EXIT_SUCCESS);
-	}
-
-
-	// other commands require credentials
-	// and additional arguments
-	struct creds credentials;
-	if(!get_credentials(CONF_PATH, &credentials))
-	{
-		printf("ERROR parsing credentials, please run <init>.\n");
-		exit(EXIT_FAILURE);
-	}
-
-	int targets_count = argc - 2;
-	char **targets = malloc(targets_count * sizeof(char *));
-
-	int x;
-	for(x = 2; x < argc; x++)
-	{
-		targets[x - 2] = malloc((strlen(argv[x]) + strlen(credentials.dir) + 2) * sizeof(char));
-		strcpy(targets[x - 2], credentials.dir);
-		strcat(targets[x - 2], "/");
-		strcat(targets[x - 2], argv[x]);
-	}
-
-	// Compute base path url
-	char base_path_adds[] = "ftp://:@ftp..altervista.org";
-	size_t base_path_length = strlen(base_path_adds) +
-														strlen(credentials.user) +
-														strlen(credentials.pwd) +
-														strlen(credentials.dir);
-
-	char *base_path = malloc((base_path_length + 1) * sizeof(char));
-	sprintf(base_path, "ftp://%s:%s@ftp.%s.altervista.org%s",
-			credentials.user, credentials.pwd, credentials.user, credentials.dir);
-
-	// MKDIR
-	if(strcmp(cmd, "mkdir") == 0)
-	{
-		int x;
-		for(x = 0; x < targets_count; x++)
-		{
-			#ifndef _WIN32
-				if(fork() == 0)
-				{
-					curl_mkdir(base_path, targets[x]);
-				}
-			#else
-				curl_mkdir(base_path, targets[x]);
-			#endif
-		}
-
-		#ifndef _WIN32
-			while(wait(NULL) > 0);
-			printf("\033[1;32mDONE.\033[0m\n");
-		#else
-			printf("DONE");
-		#endif
-	}
-	// RMDIR
-	else if(strcmp(cmd, "rmdir") == 0)
-	{
-		int x;
-		for(x = 0; x < targets_count; x++)
-		{
-			#ifndef _WIN32
-				if(fork() == 0)
-				{
-					curl_rmdir(base_path, targets[x]);
-				}
-			#else
-				curl_rmdir(base_path, targets[x]);
-			#endif
-		}
-
-		#ifndef _WIN32
-			while(wait(NULL) > 0);
-			printf("\033[1;32mDONE.\033[0m\n");
-		#else
-			printf("DONE");
-		#endif
-	}
-	// SEND
-	else if(strcmp(cmd, "send") == 0)
-	{
-		int x;
-		base_path[strlen(base_path) - strlen(credentials.dir)] = '\0';
-
-		for(x = 0; x < targets_count; x++)
-		{
-			char *target = targets[x] + strlen(credentials.dir) + 1;
-			#ifndef _WIN32
-				if(fork() == 0)
-				{
-					curl_send(base_path, targets[x], target);
-					exit(EXIT_SUCCESS);
-				}
-			#else
-				curl_send(base_path, targets[x], target);
-			#endif
-		}
-
-		#ifndef _WIN32
-			while(wait(NULL) > 0);
-			printf("\033[1;32mDONE.\033[0m\n");
-		#else
-			printf("DONE");
-		#endif
-	}
-	// DELETE
-	else if(strcmp(cmd, "delete") == 0)
-	{
-		int x;
-		for(x = 0; x < targets_count; x++)
-		{
-			#ifndef _WIN32
-				if(fork() == 0)
-				{
-					curl_delete(base_path, targets[x]);
-					exit(EXIT_SUCCESS);
-				}
-			#else
-				curl_delete(base_path, targets[x]);
-			#endif
-		}
-
-		#ifndef _WIN32
-			while(wait(NULL) > 0);
-			printf("\033[1;32mDONE.\033[0m\n");
-		#else
-			printf("DONE");
-		#endif
-	}
-	else
-	{
-		print_usage(argv[0]);
-	}
-
-	free(base_path);
-	free(targets);
-	exit(EXIT_SUCCESS);
+    char option = '\0';
+    while((option = getopt_long(argc, argv, "-:m:r:s:d:g:l::ih", long_options, NULL)) != -1)
+    {
+        switch(option)
+        {
+            case 'm':
+            case 'r':
+            case 's':
+            case 'd':
+            case 'g':
+            case 'l':
+                arg = NULL;
+                if (optarg)
+                {
+                    arg = optarg;
+                    if(STARTS_WITH(arg, "/"))
+                    {
+                        arg = (strlen(arg) > 1) ? arg + 1 : NULL;
+                    }
+                    if(option == 's' && access(arg, F_OK) != 0)
+					{
+						fprintf(stdout, "ERROR the indicated file not exists");
+						exit(EXIT_FAILURE);
+					}
+                }
+                struct creds credentials;
+                if(!get_credentials(CONF_PATH, &credentials))
+                {
+                    fprintf(stdout, "ERROR parsing credentials, please run %s --init\n", argv[0]);
+                    exit(EXIT_FAILURE);
+                }
+                do_execute(option, &credentials, arg, position);
+                break;
+            case 'i':
+                do_init(), exit(EXIT_SUCCESS);
+                break;
+            case 'h':
+            case '?':
+                print_usage(argv[0]), exit(EXIT_SUCCESS);
+                break;
+            case 1: // Percorso di lavoro
+                if (optarg)
+                {
+                    if(STARTS_WITH(optarg, "/"))
+                    {
+                        optarg = (strlen(optarg) > 1) ? optarg + 1 : NULL;
+                    }
+                    if(optarg)
+                    {
+                        position = realloc(position, (strlen("/") * 2) + strlen(optarg) + 1);
+                        sprintf(position, "/%s/", optarg);
+                    }
+                }
+                break;
+        }
+    }
+    if(position) free(position);
+    exit(EXIT_SUCCESS);
 }
 
 void print_usage(char *name)
 {
-	printf("%-10s%s <command> [directory | file names] files (...)\n\n", "usage:", name);
-	printf("command:\n");
-	printf("   %-9s setup current directory for %s\n", 						"init", name);
-	printf("   %-9s send [file names] to ftp server\n", 							"send");
-	printf("   %-9s delete [file names] from ftp server\n", 					"delete");
-	printf("   %-9s list content of [path] or '/' on server\n", 			"list");
-	printf("   %-9s create [path] directory on server\n", 						"mkdir");
-	printf("   %-9s create [path] directory on server\n", 						"rmdir");
-	printf("   %-9s show this, as any invalid command or syntax\n", 	"help");
+    fprintf(stdout, "%-10s%s\n", "Version:", PROGRAM_VERSION);
+    fprintf(stdout, "%-14s%s\n", "Source code:", "\"https://www.github.com/marcoM32/alterftp/\"");
+    fprintf(stdout, "This project is based on the main idea of @gilmoa, see the original "
+            "source on \"https://github.com/gilmoa/alterftp/\"\n");
+    fprintf(stdout, "%-8s./%s [work-path] <commands>\n", "Usage:", name);
+    fprintf(stdout, "Commands:\n");
+    fprintf(stdout, "   %-9s setup login credentials and store it in \"%s\"\n", "-i/--init", CONF_PATH);
+    fprintf(stdout, "   [optional path] %-9s [file name] to ftp server\n", "-s/--send");
+    fprintf(stdout, "   [optional path] %-9s [file name] from ftp server\n", "-d/--delete");
+    fprintf(stdout, "   [optional path] %-9s [file name] from ftp server\n", "-g/--download");
+    fprintf(stdout, "   [optional path] %-9s content of server\n", "-l/--list");
+    fprintf(stdout, "   [optional path] %-9s [dir name] create directory on server\n", "-m/--mkdir");
+    fprintf(stdout, "   [optional path] %-9s [dir name] delete directory on server\n", "-r/--rmdir");
+    fprintf(stdout, "   %-9s show this, as any invalid command or syntax\n", "-h/--help");
+    fprintf(stdout, "\nThis tool by default works in the root directory \"/\", "
+            "if you want refer to other directory put the absolute path of the latter as the first argument.\n");
 }
 
 void do_init()
 {
-	struct creds credentials;
-	char c_dir[64];
-	if(getcwd(c_dir, sizeof(c_dir)) != NULL)
-	{
-		printf("Initializing in '%s'.\n", c_dir);
+    struct creds credentials;
+    char c_dir[64];
+    if(getcwd(c_dir, sizeof(c_dir)) != NULL)
+    {
+        fprintf(stdout, "Initializing in '%s'.\n", c_dir);
+    }
+    else
+    {
+        perror("getcwd");
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(stdout, "%10s: ", "username");
+    scanf("%s", credentials.user);
+
+    fprintf(stdout, "%10s: ", "password");
+    scanf("%s", credentials.pwd);
+
+    if(!save_credentials(CONF_PATH, credentials))
+        exit(EXIT_FAILURE);
+
+    fprintf(stdout, "All set up.\n");
+}
+
+void do_execute(char option, struct creds * credentials, char *arg, char *position)
+{
+
+    char base_url_adds[] = "ftp://ftp..altervista.org";
+    size_t base_path_length = strlen(base_url_adds) + strlen(credentials->user);
+
+    char *base_url = NULL;
+    if(arg) {
+    	base_url = (char*) calloc((base_path_length + strlen(position) + strlen(arg) + 1), sizeof(char));
+    	sprintf(
+			base_url,
+			"ftp://ftp.%s.altervista.org%s%s",
+			credentials->user,
+			position,
+			arg
+		);
+	} else {
+	    base_url = (char*) calloc((base_path_length + strlen(position) + 1), sizeof(char));
+    	sprintf(base_url, "ftp://ftp.%s.altervista.org%s", credentials->user, position);
 	}
-	else
-	{
-		perror("getcwd");
-		exit(EXIT_FAILURE);
-	}
 
-	printf("%10s: ", "username");
-	scanf("%s", credentials.user);
+    char *login = (char*) calloc((strlen(credentials->user) + strlen(credentials->pwd) + strlen(":") + 1), sizeof(char));
+    sprintf(login, "%s:%s", credentials->user, credentials->pwd);
 
-	printf("%10s: ", "password");
-	scanf("%s", credentials.pwd);
+    char **commandline = NULL;
+    if(option == 'm')
+    {
+        char *mkdir = (char*) calloc((strlen(position) + strlen(arg) + strlen("MKD ") + 1), sizeof(char));
+        sprintf(mkdir, "MKD %s%s", position, arg);
+        commandline = (char **) calloc(8, sizeof(char*));
+        commandline[0] = "curl";
+        commandline[1] = "-u";
+        commandline[2] = login;
+        commandline[3] = DEFAULT_CURL_FLAGS;
+        commandline[4] = "-Q";
+        commandline[5] = mkdir;
+        commandline[6] = base_url;
+        commandline[7] = (char*) NULL;
+    }
+    else if(option == 'r')
+    {
+        char *dele = (char*) calloc((strlen(position) + strlen(arg) + strlen("RMD ") + 1), sizeof(char));
+        sprintf(dele, "RMD %s%s", position, arg);
+        commandline = (char **) calloc(8, sizeof(char*));
+        commandline[0] = "curl";
+        commandline[1] = "-u";
+        commandline[2] = login;
+        commandline[3] = DEFAULT_CURL_FLAGS;
+        commandline[4] = "-Q";
+        commandline[5] = dele;
+        commandline[6] = base_url;
+        commandline[7] = (char*) NULL;
+    }
+    else if(option == 'd')
+    {
+        char *dele = (char*) calloc((strlen(position) + strlen(arg) + strlen("DELE ") + 1), sizeof(char));
+        sprintf(dele, "DELE %s%s", position, arg);
+        commandline = (char **) calloc(8, sizeof(char*));
+        commandline[0] = "curl";
+        commandline[1] = "-u";
+        commandline[2] = login;
+        commandline[3] = DEFAULT_CURL_FLAGS;
+        commandline[4] = "-Q";
+        commandline[5] = dele;
+        commandline[6] = base_url;
+        commandline[7] = (char*) NULL;
+    }
+    else if(option == 's')
+    {
+        commandline = (char **) calloc(8, sizeof(char*));
+        commandline[0] = "curl";
+        commandline[1] = "-u";
+        commandline[2] = login;
+        commandline[3] = DEFAULT_CURL_FLAGS;
+        commandline[4] = "-T";
+        commandline[5] = arg;
+        commandline[6] = base_url;
+        commandline[7] = (char*) NULL;
+    }
+    else if(option == 'g')
+    {
+        commandline = (char **) calloc(7, sizeof(char*));
+        commandline[0] = "curl";
+        commandline[1] = "-u";
+        commandline[2] = login;
+        commandline[3] = DEFAULT_CURL_FLAGS;
+        commandline[4] = "-O";
+        commandline[5] = base_url;
+        commandline[6] = (char*) NULL;
+    }
+    else if(option == 'l')
+    {
+        commandline = (char **) calloc(7, sizeof(char*));
+        commandline[0] = "curl";
+        commandline[1] = "-u";
+        commandline[2] = login;
+        commandline[3] = DEFAULT_CURL_FLAGS;
+        commandline[4] = "-l";
+        commandline[5] = base_url;
+        commandline[6] = (char*) NULL;
+    }
 
-	printf("%10s: ", "directory");
-	scanf("%s", credentials.dir);
+#ifndef _WIN32
+    if(fork() == 0)
+    {
+        curl_cmd(commandline);
+    }
+    while(wait(NULL) > 0);
+    fprintf(stdout, "\033[1;32mDONE.\033[0m\n");
+#else
+    curl_cmd(commandline);
+    printf("DONE\n");
+#endif
 
-	// Remove annoying '/'
-	// Before
-	if(credentials.dir[0] != '/')
-	{
-		char *tmp = malloc((strlen(credentials.dir) + 1) * sizeof(char));
-		strcpy(tmp, "/");
-		strcat(tmp, credentials.dir);
-		strcpy(credentials.dir, tmp);
-		free(tmp);
-	}
-	// After
-	if(credentials.dir[strlen(credentials.dir) - 1] == '/')
-		credentials.dir[strlen(credentials.dir) - 1] = '\0';
+    if(option == 'm' && option == 'r' && option == 'd')
+    {
+        if(commandline[5]) free(commandline[5]);
+    }
 
-	if(!save_credentials(CONF_PATH, credentials))
-		exit(EXIT_FAILURE);
-
-	printf("All set up.\n");
+    if(base_url) free(base_url);
+    if(login) free(login);
+    if(commandline) free(commandline);
 }
 
-int curl_cmd(char *base_path, char *cmd, char *arg)
+int curl_cmd(char *commandline[])
 {
-	int r;
-	char *location = malloc((strlen(base_path) + 2) * sizeof(char));
-	strcpy(location, base_path);
-	// strcat(location, "/");
-
-	// printf("%s %s %s %s\n", "curl", location, cmd, arg);
-	#ifndef _WIN32
-		r = execlp("curl", "curl", "-sS", location, cmd, arg, (char *)NULL);
-	#else
-		char *system_command = malloc((strlen(location) + strlen(cmd) + strlen(arg) + 19) * sizeof(char));
-		sprintf(system_command, "cmd /C curl -sS %s %s %s", location, cmd, arg);
-		r = system(system_command);
-		free(system_command);
-	#endif
-	free(location);
-	return r;
-}
-
-int curl_mkdir(char *base_path, char *path)
-{
-	int r;
-	char *target = malloc((strlen(path) + 4) * sizeof(char));
-	strcpy(target, "MKD ");
-	strcat(target, path + 1);
-
-	char *base_path_c = malloc((strlen(base_path) + 2) * sizeof(char));
-	strcpy(base_path_c, base_path);
-	strcat(base_path_c, "/");
-
-	r = curl_cmd(base_path_c, "-Q", target);
-	free(target);
-	return r;
-}
-
-int curl_rmdir(char *base_path, char *path)
-{
-	int r;
-	char *target = malloc((strlen(path) + 4) * sizeof(char));
-	strcpy(target, "RMD ");
-	strcat(target, path + 1);
-
-	char *base_path_c = malloc((strlen(base_path) + 2) * sizeof(char));
-	strcpy(base_path_c, base_path);
-	strcat(base_path_c, "/");
-
-	r = curl_cmd(base_path_c, "-Q", target);
-	free(target);
-	return r;
-}
-
-int curl_send(char *base_path, char *path, char *target)
-{
-	int r = 0;
-	char *base_path_c = malloc((strlen(base_path) + strlen(path) + 1) * sizeof(char));
-	strcpy(base_path_c, base_path);
-	strcat(base_path_c, path);
-
-	r = curl_cmd(base_path_c, "-T", target);
-	free(target);
-	return r;
-}
-
-int curl_delete(char *base_path, char *path)
-{
-	int r;
-	char *target = malloc((strlen(path) + 4) * sizeof(char));
-	strcpy(target, "DELE ");
-	strcat(target, path + 1);
-
-	char *base_path_c = malloc((strlen(base_path) + 2) * sizeof(char));
-	strcpy(base_path_c, base_path);
-	strcat(base_path_c, "/");
-
-	r = curl_cmd(base_path_c, "-Q", target);
-	free(target);
-	return r;
+    int r = 0;
+#ifndef _WIN32
+    r = execvp("curl", commandline);
+#else
+    int size = strlen("cmd /C") + 1;
+    char *system_command = (char*) calloc(size, sizeof(char));
+    strcat(system_command, "cmd /C");
+    while(*commandline)
+    {
+        if(*commandline)
+        {
+            size = (strlen(system_command) + strlen(" ") + strlen(*commandline) + 1) * sizeof(char);
+            realloc(system_command, size);
+            strcat(system_command, " ");
+            strcat(system_command, *commandline);
+        }
+        commandline++;
+    }
+    realloc(system_command, (strlen(system_command) + 1) * sizeof(char));
+    system_command[strlen(system_command)] = '\0';
+    printf("%s\n", system_command);
+    r = system(system_command);
+    free(system_command);
+#endif
+    return r;
 }
